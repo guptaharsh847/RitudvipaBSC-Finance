@@ -26,10 +26,12 @@ After you change `Code.gs`, use **Deploy → Manage deployments → Edit → New
 
 ## Calculation rules
 
-- **Profit/Loss** = Total income − Total expenditure. **Current balance** = Opening balance + Profit/Loss.
+- **Each month is a separate account.** There is no opening balance and nothing carries over between months; every total is for that month only.
+- **Profit/Loss** = Total income − Total expenditure (for that month).
 - **BSC Loss** = expenditure not met by regular income. Regular income excludes "Last Month Remaining" and
   "HELP (BSC Loss Coverage)". The month shows the loss, the HELP coverage received and the remaining gap.
-- If "Last Month Remaining" is recorded as an income row, set the Opening balance to 0 so it isn't counted twice.
+- "Last Month Remaining" rows are counted in that month's Total income, as in the original sheets. The dashboard leaves them out of
+  "BSC total income" so the same money isn't counted twice across several months.
   The legacy import does this automatically.
 - An expense is "paid personally" when **Expense Beared By** is filled in and isn't Ritudwip BSC.
 - Preaching: Net = Donations − Expenses. Per-plate cost = Total expenses ÷ (Student + Inmate + Other plates).

@@ -93,11 +93,9 @@ const Exporter = (() => {
     let r = 1;
     const kv = (k, v, bold) => { w.put(r, 12, k, bold ? S.labelBold : S.label); w.put(r, 13, v, bold ? S.labelBold : S.label, { money: true }); r++; };
     w.merge(r, 12, r, 13, 'Income-Expenditure Summary', S.section); r++;
-    const openRow = r; kv('Opening Balance', s.opening);
     const incRow = r; kv('Total Income', { f: A(tr, 3), v: s.totalIncome });
     const expRow = r; kv('Total Expenditure', { f: A(tr, 9), v: s.totalExpense });
-    const plRow = r; kv('Profit / Loss', { f: `${A(incRow, 13)}-${A(expRow, 13)}`, v: s.profitLoss }, true);
-    kv('Current Balance', { f: `${A(openRow, 13)}+${A(plRow, 13)}`, v: s.closing }, true);
+    kv('Profit / Loss', { f: `${A(incRow, 13)}-${A(expRow, 13)}`, v: s.profitLoss }, true);
     r++;
     const block = (title, obj) => {
       const entries = Object.entries(obj).sort((a, b) => b[1] - a[1]);

@@ -77,7 +77,7 @@ const Dashboard = (() => {
         ${kpi('BSC net loss', inr(b.loss), `HELP covered ${inr(b.coverage)} · gap ${inr(b.gap)}`, b.loss > 0 ? 'neg' : '')}
         ${kpi('Preaching total spent', inr(p.spent), `${p.count} event${p.count === 1 ? '' : 's'} · ${p.plates} plates`)}
         ${kpi('Preaching donations', inr(p.donations), `net ${inr(p.donations - p.spent, { sign: true })}`)}
-        ${kpi('Current balance', inr(d.currentBalance), d.currentBalanceMonth ? 'closing of ' + UI.monthLabel(d.currentBalanceMonth) : 'no months yet', 'strong')}
+        ${kpi('BSC net (income − expenditure)', inr(b.net, { sign: true }), 'total of the selected months', 'strong' + (b.net < 0 ? ' neg' : ''))}
       </div>
       <div class="chart-grid">
         <section class="card chart-card"><h2>Spending: BSC loss vs preaching</h2><div class="chart-box chart-donut"><canvas id="c-donut" role="img" aria-label="Donut chart: BSC loss ${inr(b.loss)}, preaching ${inr(p.spent)}"></canvas></div></section>

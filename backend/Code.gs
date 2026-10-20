@@ -624,11 +624,10 @@ function summarizeMonth_(m, income, expenses) {
   });
   const profitLoss = round2_(totalIncome - totalExpense);
   return {
-    opening: num_(m.OpeningBalance),
+    // Each month stands alone: no opening balance is carried in, so the month's balance = its profit/loss.
     totalIncome: totalIncome,
     totalExpense: totalExpense,
     profitLoss: profitLoss,
-    closing: round2_(num_(m.OpeningBalance) + profitLoss),
     carryForward: carry,
     coverage: coverage,
     operatingIncome: operatingIncome,
@@ -660,26 +659,18 @@ function getMonth_(p) {
   if (!m) throw err_('NOT_FOUND', 'Month not found.');
   const income = sortByDate_(childrenOf_('BscIncome', 'MonthID', m.MonthID));
   const expenses = sortByDate_(childrenOf_('BscExpenses', 'MonthID', m.MonthID));
-  return { month: m, income: income, expenses: expenses, summary: summarizeMonth_(m, income, expenses), prevClosing: previousClosing_(m.Month) };
-}
-
-function previousClosing_(ym) {
-  const prev = monthsWithSummary_().filter(m => m.Month < ym);
-  return prev.length ? prev[prev.length - 1].summary.closing : 0;
+  return { month: m, income: income, expenses: expenses, summary: summarizeMonth_(m, income, expenses) };
 }
 
 function createMonth_(p, user) {
   const ym = str_(p.Month, 7);
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(ym)) throw err_('BAD_REQUEST', 'Month must be YYYY-MM.');
   if (T_('BscMonths').all().some(m => m.Month === ym)) throw err_('BAD_REQUEST', monthLabel_(ym) + ' already exists.');
-  const opening = p.OpeningBalance === '' || p.OpeningBalance === undefined || p.OpeningBalance === null
-    ? previousClosing_(ym) : amount_(p.OpeningBalance);
-  return T_('BscMonths').insert({ Month: ym, Title: 'BSC Accounts – ' + monthLabel_(ym), OpeningBalance: opening, Notes: str_(p.Notes, 2000) }, user);
+  return T_('BscMonths').insert({ Month: ym, Title: 'BSC Accounts – ' + monthLabel_(ym), OpeningBalance: 0, Notes: str_(p.Notes, 2000) }, user);
 }
 
 function updateMonth_(p, user) {
   const patch = {};
-  if ('OpeningBalance' in p) patch.OpeningBalance = amount_(p.OpeningBalance);
   if ('Notes' in p) patch.Notes = str_(p.Notes, 2000);
   return T_('BscMonths').update(p.MonthID, patch, user);
 }
@@ -835,20 +826,17 @@ function getDashboard_(p) {
   });
   Object.keys(preaching).forEach(k => { preaching[k] = round2_(preaching[k]); });
 
-  const upToTo = allMonths.filter(m => m.Month <= toM);
-  const latest = upToTo.length ? upToTo[upToTo.length - 1] : null;
+  bsc.net = round2_(bsc.income - bsc.expense); // months are independent: net of the range, nothing carried over
 
   return {
     from: from, to: to,
     bsc: bsc,
     preaching: preaching,
-    currentBalance: latest ? latest.summary.closing : 0,
-    currentBalanceMonth: latest ? latest.Month : '',
     monthly: months.map(m => ({
       MonthID: m.MonthID, Month: m.Month,
       income: round2_(m.summary.totalIncome - m.summary.carryForward),
       expense: m.summary.totalExpense,
-      loss: m.summary.loss, closing: m.summary.closing
+      loss: m.summary.loss, profitLoss: m.summary.profitLoss
     })),
     expenseByPurpose: Object.keys(expenseByPurpose).map(k => ({ purpose: k, amount: round2_(expenseByPurpose[k]) }))
       .sort((a, b) => b.amount - a.amount),
@@ -1059,24 +1047,6 @@ function isBlank_(cells) {
   return cells.every(v => v === '' || v === null || (typeof v === 'string' && !v.trim()));
 }
 
-function findLabelValue_(values, regex) {
-  for (let r = 0; r < values.length; r++) {
-    for (let c = 0; c < values[r].length; c++) {
-      const v = values[r][c];
-      if (typeof v !== 'string' || !regex.test(v)) continue;
-      for (let k = 1; k <= 4 && c + k < values[r].length; k++) {
-        const n = parseAmount_(values[r][c + k]);
-        if (values[r][c + k] !== '' && isFinite(n)) return { value: n, row: r + 1, col: c + k + 1 };
-      }
-      if (r + 1 < values.length) {
-        const n = parseAmount_(values[r + 1][c]);
-        if (values[r + 1][c] !== '' && isFinite(n)) return { value: n, row: r + 2, col: c + 1 };
-      }
-    }
-  }
-  return null;
-}
-
 /** Detect "YYYY-MM" from a tab name like "aug 26", "Sept 2026", "October-26". */
 function tabYearMonth_(name) {
   const t = String(name).toLowerCase();
@@ -1133,14 +1103,12 @@ function importLegacyBsc_(L, res, user, cats) {
     used[c.ym] = c;
   });
 
-  let prevClosing = null;
   LEGACY_MONTHS.forEach(ym => {
     const c = used[ym];
     if (!c) { L(SRC, '', '', 'WARN', ym, 'No tab found for ' + monthLabel_(ym)); return; }
     const tab = c.sheet.getName();
     if (existing[ym]) {
       L(SRC, tab, '', 'SKIPPED', ym, monthLabel_(ym) + ' already exists in the app (created manually) — not overwritten');
-      prevClosing = null;
       return;
     }
     L(SRC, tab, '', 'INFO', ym, 'Using tab for ' + monthLabel_(ym) + ' (detected by ' + c.how + ')');
@@ -1192,21 +1160,10 @@ function importLegacyBsc_(L, res, user, cats) {
       }
     }
 
-    // Opening balance.
-    let opening = 0, openingHow = 'default 0';
-    const hasCarry = income.some(r => r.Purpose === PURPOSE_CARRY);
-    const lmb = findLabelValue_(values, /last\s*month('?s)?\s*bal/i);
-    if (hasCarry) {
-      openingHow = 'set to 0 because "' + PURPOSE_CARRY + '" is already recorded as income' + (lmb ? ' (Last Month Balance cell = ' + lmb.value + ')' : '');
-    } else if (lmb) {
-      opening = round2_(lmb.value); openingHow = '"Last Month Balance" cell at R' + lmb.row + 'C' + lmb.col;
-    } else if (prevClosing !== null) {
-      opening = prevClosing; openingHow = 'previous imported month closing';
-    }
-
-    const month = T_('BscMonths').insert({ Month: ym, Title: 'BSC Accounts – ' + monthLabel_(ym), OpeningBalance: opening, Notes: 'Imported from "' + tab + '"', Source: 'LEGACY' }, user);
+    // Months are independent: opening balance is always 0 (no carry-over from the previous month).
+    const month = T_('BscMonths').insert({ Month: ym, Title: 'BSC Accounts – ' + monthLabel_(ym), OpeningBalance: 0, Notes: 'Imported from "' + tab + '"', Source: 'LEGACY' }, user);
     res.months++;
-    L(SRC, tab, '', 'IMPORTED', 'BscMonths', monthLabel_(ym) + ' — opening balance ' + opening + ' (' + openingHow + ')');
+    L(SRC, tab, '', 'IMPORTED', 'BscMonths', monthLabel_(ym) + ' — standalone month (opening balance 0)');
 
     const strip = rows => rows.map(r => { const o = Object.assign({}, r, { MonthID: month.MonthID }); delete o._row; return o; });
     T_('BscIncome').insertMany(strip(income), user);
@@ -1215,7 +1172,6 @@ function importLegacyBsc_(L, res, user, cats) {
     expenses.forEach(r => L(SRC, tab, r._row, 'IMPORTED', 'BscExpenses', [r.Date, r.Mediator, r.ExpenseBearedBy, r.Purpose, r.Amount].join(' | ')));
     res.income += income.length;
     res.bscExpenses += expenses.length;
-    prevClosing = summarizeMonth_(month, income, expenses).closing;
   });
 }
 
