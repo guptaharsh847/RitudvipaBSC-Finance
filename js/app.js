@@ -377,14 +377,14 @@ const App = (() => {
     const u = state.user;
     document.getElementById('app').innerHTML = `
       <header class="topbar">
-        <a class="brand" href="#/dashboard"><img class="brand-logo" src="assets/header-logo.jpg" alt="" width="36" height="36"><span class="brand-name">${UI.esc(cfg.APP_NAME)}</span></a>
+        <a class="brand" href="#/dashboard"><img class="brand-logo" src="assets/header-logo.png" alt="Ritudwip BSC" width="44" height="36"><span class="brand-name"><span class="name-full">${UI.esc(cfg.APP_NAME)}</span><span class="name-short">BSC Finance</span></span></a>
         <span id="offline-badge" class="badge badge-warn" hidden>Offline</span>
         <div class="topbar-actions">
-          <button class="btn btn-ghost btn-sm" id="install-btn" hidden>Install app</button>
+          <button class="btn btn-ghost btn-sm" id="install-btn" hidden title="Install on this phone">Install</button>
           <button class="icon-btn" id="refresh-btn" aria-label="Refresh data" title="Refresh data from the sheet"><span class="refresh-icon">↻</span></button>
           <button class="icon-btn" id="theme-btn" aria-label="Toggle dark mode" title="Light / dark">◐</button>
           <div class="user-chip" title="${UI.esc(u.Name)} · ${UI.esc(u.Role)}"><span class="avatar">${UI.esc((u.Name || '?')[0].toUpperCase())}</span><span class="user-name">${UI.esc(u.Name)}</span></div>
-          <button class="btn btn-ghost btn-sm" id="logout-btn" aria-label="Log out" title="Log out"><span class="logout-icon" aria-hidden="true">⎋</span><span class="logout-text">Log out</span></button>
+          <button class="btn btn-ghost btn-sm" id="logout-btn" aria-label="Log out" title="Log out"><svg class="logout-icon" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg><span class="logout-text">Log out</span></button>
         </div>
       </header>
       <nav class="nav" aria-label="Main">
@@ -429,12 +429,15 @@ const App = (() => {
     Api.setFresh(true);
     try {
       await loadCategories();
-      await route({ keepScroll: true });
-      if (!Api.isOffline()) UI.toast('Data refreshed', 'success', 1500);
+      await route({ keepScroll: true });   // current page first, straight from the sheet
     } finally {
       Api.setFresh(false);
-      if (btn) btn.classList.remove('spinning');
     }
+    try {
+      await preloadAll(true);               // then everything else, so all pages are up to date
+      if (!Api.isOffline()) UI.toast('All data refreshed', 'success', 1800);
+    } catch (e) { UI.fail(e); }
+    finally { if (btn) btn.classList.remove('spinning'); }
   }
 
   // Background revalidation found newer data: re-render quietly unless the user is mid-edit.
@@ -450,12 +453,30 @@ const App = (() => {
     route({ keepScroll: true, silent: true });
   }, 400);
 
-  /** Warm the cache so the main pages open instantly. */
-  function prefetch() {
+  /**
+   * Download everything (lists, dashboard, every month and event) and save it on the device,
+   * so every page opens instantly and works offline. fresh=true skips all caches (login / Refresh).
+   */
+  let preloading = null;
+  function preloadAll(fresh) {
+    if (preloading) return preloading;
+    const opts = { fresh };
     const now = new Date();
     const from = UI.isoDate(new Date(now.getFullYear(), now.getMonth() - 2, 1));
-    ['listMonths', 'listEvents'].forEach(a => Api.call(a).catch(() => {}));
-    Api.call('getDashboard', { from, to: UI.today() }).catch(() => {});
+    const run = async () => {
+      const [months, events] = await Promise.all([
+        Api.call('listMonths', {}, opts), Api.call('listEvents', {}, opts),
+        Api.call('getCategories', {}, opts), Api.call('getDashboard', { from, to: UI.today() }, opts)
+      ]);
+      const jobs = months.map(m => () => Api.call('getMonth', { MonthID: m.MonthID }, opts))
+        .concat(events.map(e => () => Api.call('getEvent', { EventID: e.EventID }, opts)));
+      // A few at a time so Apps Script isn't flooded.
+      const workers = Array.from({ length: 4 }, async () => { while (jobs.length) await jobs.shift()().catch(() => {}); });
+      await Promise.all(workers);
+      return months.length + events.length;
+    };
+    preloading = run().finally(() => { preloading = null; });
+    return preloading;
   }
 
   async function route(opts = {}) {
@@ -513,7 +534,7 @@ const App = (() => {
     document.getElementById('app').innerHTML = `
       <div class="login-wrap">
         <form class="login-card" id="login-form" autocomplete="on">
-          <div class="login-brand"><img class="login-logo" src="assets/main-logo.jpg" alt="BSC Ritudvipa — A home away from home" width="640" height="585">
+          <div class="login-brand"><img class="login-logo" src="assets/main-logo.png" alt="BSC Ritudvipa — A home away from home" width="420" height="385">
             <h1>${UI.esc(cfg.APP_NAME)}</h1><p class="muted">Hare Krishna! Please sign in.</p></div>
           <label class="field"><span>Name</span><input name="name" autocomplete="username" required autocapitalize="words"></label>
           <label class="field"><span>PIN</span><input name="pin" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="current-password" required minlength="4" maxlength="8"></label>
@@ -531,7 +552,7 @@ const App = (() => {
       const btn = form.querySelector('[type=submit]');
       try {
         const user = await UI.busy(btn, () => Api.login(form.elements.namedItem("name").value.trim(), form.elements.namedItem("pin").value.trim()));
-        await start(user);
+        await start(user, true);
       } catch (ex) {
         err.textContent = ex.message;
         err.hidden = false;
@@ -543,15 +564,26 @@ const App = (() => {
     if (ob) ob.onclick = () => { const u = Api.enterOfflineMode(); if (u) start(u); };
   }
 
-  async function start(user) {
+  async function start(user, fromLogin) {
     state.user = user;
     renderShell();
+    if (fromLogin) {
+      // Fresh login: load the latest data from the sheet into the device cache.
+      const btn = document.getElementById('refresh-btn');
+      if (btn) btn.classList.add('spinning');
+      Api.setFresh(true);
+      try { await loadCategories(); } finally { Api.setFresh(false); }
+      preloadAll(true)
+        .then(n => UI.toast(`All data loaded (${n} months & events) — pages now open instantly`, 'success', 2500))
+        .catch(() => {})
+        .finally(() => { if (btn) btn.classList.remove('spinning'); });
+    }
     // Categories come from cache instantly if present; don't block the first page on the network.
     const cats = loadCategories();
     if (!state.categories.length) await cats;
     if (!location.hash || location.hash === '#' || location.hash === '#/') location.hash = '#/dashboard';
     else route();
-    setTimeout(prefetch, 800);
+    if (!fromLogin) setTimeout(() => preloadAll(false).catch(() => {}), 800); // resume: top up the cache quietly
   }
 
   function init() {
@@ -576,7 +608,8 @@ const App = (() => {
       if (document.visibilityState === 'hidden') lastShown = Date.now();
     });
     Api.onAuthLost(() => { state.user = null; renderLogin('Your session has expired. Please sign in again.'); });
-    window.addEventListener('online', () => UI.toast('Back online', 'success'));
+    window.addEventListener('online', () => { setOfflineBadge(false); UI.toast('Back online', 'success'); });
+    window.addEventListener('offline', () => setOfflineBadge(true));
     if ('serviceWorker' in navigator && location.protocol === 'https:') {
       navigator.serviceWorker.register('sw.js').catch(() => { /* offline shell is optional */ });
     }

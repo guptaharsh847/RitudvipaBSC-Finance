@@ -40,3 +40,18 @@ After you change `Code.gs`, use **Deploy → Manage deployments → Edit → New
 - Deletes are soft: rows get `Deleted = TRUE` and stay in the sheet.
 - Offline: pages you have opened before are shown from saved data (read-only). `sw.js` caches the app files.
 - Excel export uses `xlsx-js-style` (a SheetJS build that supports bold, fills and borders) and runs entirely in the browser.
+
+## Speed, caching and Refresh
+
+- **At login** the app downloads all data from the sheet (lists, dashboard, every month and event) and saves it on the phone.
+  After that, every page opens instantly from the saved copy.
+- **Background updates:** when a page opens, the saved copy shows first. If it is older than 15 seconds, the app checks the sheet
+  in the background and quietly updates the page if anything changed. It does not interrupt you while you are editing; instead an
+  orange dot appears on ↻.
+- **Your own changes** always show up straight away.
+- **↻ Refresh** (top bar) re-downloads everything from the sheet. Use it to see changes made by other users, or if data looks out of date.
+- **Server cache:** Apps Script keeps read results for up to 5 minutes, and any save in the app clears it. Edits typed directly into the
+  Google Sheet appear after Refresh, or within 5 minutes.
+- **Install on a phone:** Android/Chrome shows an **Install** button in the top bar. On iPhone, use Safari → Share → *Add to Home Screen*.
+- Logos: `assets/header-logo.png` and `assets/main-logo.png` are resized copies of `headerlogo.jpeg` and `mainlogo.jpeg`
+  (the originals are not loaded by the app).

@@ -1,9 +1,9 @@
 // Offline shell: caches the app files and CDN libraries so the app opens without network.
 // Data offline comes from api.js's localStorage cache; API POSTs are never intercepted.
-const CACHE = 'rbf-shell-v2';
+const CACHE = 'rbf-shell-v3';
 const SHELL = [
   './', 'index.html', 'css/style.css', 'manifest.webmanifest',
-  'assets/header-logo.jpg', 'assets/main-logo.jpg', 'assets/icon-192.png', 'assets/icon-512.png',
+  'assets/header-logo.png', 'assets/main-logo.png', 'assets/icon-192.png', 'assets/icon-512.png',
   'js/config.js', 'js/api.js', 'js/app.js', 'js/dashboard.js', 'js/bscMonths.js', 'js/preaching.js', 'js/export.js',
   'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js',
   'https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js'

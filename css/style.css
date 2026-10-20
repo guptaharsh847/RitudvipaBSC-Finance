@@ -481,3 +481,40 @@ details summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
   .nav, .topbar, .btn, .icon-btn, .mini-summary, .filters { display: none !important; }
   main { margin: 0; padding: 0; }
 }
+
+/* ── Logos, refresh, compact mobile header ── */
+.brand-logo { height: 38px; width: auto; flex: none; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .25)); }
+.brand-name { font-size: .98rem; }
+.login-logo {
+  display: block; width: min(250px, 70vw); height: auto; margin: 0 auto;
+  filter: drop-shadow(0 4px 10px rgba(60, 20, 10, .15));
+}
+.login-card { max-width: 400px; }
+#refresh-btn { position: relative; }
+#refresh-btn .refresh-icon { display: inline-block; font-size: 1.2rem; line-height: 1; }
+#refresh-btn.spinning .refresh-icon { animation: spin .8s linear infinite; }
+#refresh-btn.has-update::after {
+  content: ""; position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 0 2px var(--primary);
+}
+.logout-icon { display: none; }
+@media (max-width: 639px) {
+  .topbar { gap: 6px; padding: 0 8px; }
+  .topbar-actions { gap: 2px; }
+  .topbar .icon-btn { width: 34px; height: 34px; }
+  .user-chip { display: none; }
+  #logout-btn { padding: 0 8px; border: 0; }
+  .logout-text { display: none; }
+  .logout-icon { display: inline; }
+  #install-btn { padding: 0 8px; font-size: .8rem; }
+}
+@media (max-width: 359px) { .brand-name { display: none; } }
+.name-short { display: none; }
+@media (max-width: 639px) {
+  .name-full { display: none; }
+  .name-short { display: inline; }
+  .logout-icon { display: block; }
+  /* Date range: From/To side by side */
+  .range-form .field-inline { flex: 1 1 140px; }
+  .range-form .field-inline input { width: 100%; min-width: 0; }
+}

@@ -65,7 +65,8 @@ const Api = (() => {
     if (!cfg.API_URL || cfg.API_URL.includes('PASTE_YOUR')) {
       throw new ApiError('CONFIG', 'Backend URL not set. Edit js/config.js → API_URL.');
     }
-    if (isRead && !fresh && !opts.noCache) {
+    const wantFresh = fresh || !!opts.fresh;
+    if (isRead && !wantFresh && !opts.noCache) {
       const c = readCache(action, payload);
       if (c && c.t > lastWriteAt) {
         if (Date.now() - c.t > REVALIDATE_AFTER_MS) revalidate(action, payload, c);
@@ -73,7 +74,7 @@ const Api = (() => {
       }
     }
     try {
-      const data = await network(action, payload, isRead);
+      const data = await network(action, payload, isRead, wantFresh);
       if (!isRead && action !== 'login' && action !== 'logout') {
         lastWriteAt = Date.now();
         try { localStorage.setItem('rbf_last_write', String(lastWriteAt)); } catch { /* ignore */ }
@@ -100,10 +101,10 @@ const Api = (() => {
     inflight.set(key, p);
   }
 
-  async function network(action, payload, isRead) {
+  async function network(action, payload, isRead, wantFresh) {
     const cfg = window.APP_CONFIG;
     // "fresh" also tells the server to skip its own short-lived cache.
-    const sent = isRead && fresh ? Object.assign({}, payload, { fresh: true }) : payload;
+    const sent = isRead && wantFresh ? Object.assign({}, payload, { fresh: true }) : payload;
     const body = JSON.stringify({ action, token: getToken(), payload: sent });
     let res;
     const ctrl = new AbortController();

@@ -104,7 +104,23 @@ function handle_(req) {
       lock = LockService.getScriptLock();
       if (!lock.tryLock(20000)) throw err_('BUSY', 'Server is busy, please try again.');
     }
+    // Read cache: results are keyed by a data version that every write bumps, so they are never stale
+    // after an app edit. Manual edits in the sheet show up after READ_CACHE_SECONDS or via Refresh.
+    let ckey = null;
+    if (READ_CACHEABLE[action]) {
+      const p = Object.assign({}, payload); delete p.fresh;
+      ckey = 'r_' + dataVersion_() + '_' + action + '_' + md5_(JSON.stringify(p));
+      if (!payload.fresh) {
+        const hit = CacheService.getScriptCache().get(ckey);
+        if (hit) return { ok: true, data: JSON.parse(hit), cached: true };
+      }
+    }
     const data = route.fn(payload, user);
+    if (route.write) bumpDataVersion_();
+    if (ckey) {
+      try { CacheService.getScriptCache().put(ckey, JSON.stringify(data), READ_CACHE_SECONDS); }
+      catch (e) { /* value over 100 KB — just don't cache */ }
+    }
     return { ok: true, data: data === undefined ? null : data };
   } catch (e) {
     if (e && e.appCode) return { ok: false, error: e.message, code: e.appCode };
@@ -113,6 +129,20 @@ function handle_(req) {
   } finally {
     if (lock) lock.releaseLock();
   }
+}
+
+const READ_CACHEABLE = { listMonths: 1, getMonth: 1, listEvents: 1, getEvent: 1, getCategories: 1, getDashboard: 1 };
+const READ_CACHE_SECONDS = 300;
+
+function dataVersion_() {
+  return PropertiesService.getScriptProperties().getProperty('DATA_VER') || '0';
+}
+function bumpDataVersion_() {
+  PropertiesService.getScriptProperties().setProperty('DATA_VER', String(Date.now()));
+}
+function md5_(s) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, s, Utilities.Charset.UTF_8)
+    .map(b => ('0' + (b & 0xff).toString(16)).slice(-2)).join('');
 }
 
 function json_(obj) {
@@ -354,6 +384,7 @@ function clean_(o) {
 function setup() {
   resetTables_();
   const res = setupAction_({}, null, true);
+  bumpDataVersion_();
   Logger.log(JSON.stringify(res));
   return res;
 }
@@ -406,12 +437,18 @@ function auth_(token) {
   const s = CacheService.getScriptCache().get('s_' + token);
   if (!s) throw err_('AUTH', 'Your session has expired. Please log in again.');
   const sess = JSON.parse(s);
+  // The user's active/role check is cached briefly (saveUser clears it) to avoid reading Users every request.
+  const cache = CacheService.getScriptCache();
+  const uc = cache.get('u_' + sess.UserID);
+  if (uc) return JSON.parse(uc);
   const u = T_('Users').find(sess.UserID);
   if (!u || u.Active !== true) {
-    CacheService.getScriptCache().remove('s_' + token);
+    cache.remove('s_' + token);
     throw err_('AUTH', 'This user is disabled.');
   }
-  return { UserID: u.UserID, Name: u.Name, Role: u.Role };
+  const out = { UserID: u.UserID, Name: u.Name, Role: u.Role };
+  cache.put('u_' + u.UserID, JSON.stringify(out), 300);
+  return out;
 }
 
 function login_(p) {
@@ -463,6 +500,7 @@ function saveUser_(p, user) {
     }
     const patch = { Name: name, Role: role, Active: active };
     if (pin) { patch.Salt = Utilities.getUuid(); patch.PinHash = hash_(pin, patch.Salt); }
+    CacheService.getScriptCache().remove('u_' + cur.UserID);
     return clean_(t.update(cur.UserID, patch, user));
   }
   if (!pin) throw err_('BAD_REQUEST', 'A PIN is required for a new user.');
@@ -865,6 +903,7 @@ function importLegacy() {
   lock.waitLock(30000);
   try {
     const res = importLegacy_({ UserID: 'legacy', Name: 'Legacy Import' });
+    bumpDataVersion_();
     Logger.log(JSON.stringify(res, null, 2));
     return res;
   } finally {
