@@ -1,0 +1,15 @@
+{
+  "name": "Ritudvipa BSC Finance",
+  "short_name": "BSC Finance",
+  "description": "BSC monthly accounts and preaching program expenses",
+  "start_url": "./#/dashboard",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fbf6ef",
+  "theme_color": "#8c1d40",
+  "icons": [
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
